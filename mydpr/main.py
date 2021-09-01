@@ -1,18 +1,21 @@
 import pytorch_lightning as pl
-from pytorch_lightning import callbacks
 from pytorch_lightning.callbacks import ModelCheckpoint
 import torch
 import esm
 from model.biencoder import MyEncoder
-from data.cath35 import Cath35DataModule
+from dataset.cath35 import Cath35DataModule
 
 model_dir = "../model/"
 use_wandb = False
+batch_sz = 24
+cath_dir = "/share/wangsheng/train_test_data/cath35_20201021/cath35_a3m/"
+cath_cfg = "../../mydpr/split/"
 if use_wandb:
     from pytorch_lightning.loggers import WandbLogger
     logger = WandbLogger(project='pl_ft', log_model=True)
 else:
     logger = True
+#TODO: add arg parser
 
 callback_checkpoint = ModelCheckpoint(
     monitor="val_acc",
@@ -33,7 +36,7 @@ def main():
     model.load_state_dict(later)
     ##################################
     #model.load_from_checkpoint()
-    dm = Cath35DataModule(alphabet)
+    dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, alphabet)
     trainer = pl.Trainer(
         gpus=[0,1], 
         accelerator='ddp2', 
