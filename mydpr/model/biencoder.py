@@ -68,9 +68,9 @@ class MyEncoder(pl.LightningModule):
             qebd = SyncFunction.apply(qebd)
             cebd = SyncFunction.apply(cebd)
         sim_mx = dot_product_scores(qebd, cebd)
-        label = torch.arange(sim_mx.shape[0], dtype=torch.long)
+        label = torch.arange(sim_mx.shape[0])
         sm_score = F.log_softmax(sim_mx, dim=1)
-        label = label.type_as(sm_score)
+        label = label.type_as(sm_score).long()
         loss = F.nll_loss(
             sm_score,
             label,
@@ -93,7 +93,8 @@ class MyEncoder(pl.LightningModule):
         ebd = self.forward(batch)
         loss = self.get_loss(ebd)
         with torch.no_grad():
-            acc = self.get_acc(ebd)
+            hit, tot = self.get_acc(ebd)
+            acc = hit.cpu() / tot
         values = {
             'train_loss': loss,
             'train_acc' : acc,
@@ -104,7 +105,8 @@ class MyEncoder(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         ebd = self(batch)
         val_loss = self.get_loss(ebd)
-        val_acc  = self.get_acc(ebd)
+        hit, tot  = self.get_acc(ebd)
+        val_acc = hit.cpu() / tot
         values = {
             'val_loss': val_loss,
             'val_acc' : val_acc,
@@ -115,7 +117,8 @@ class MyEncoder(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         ebd = self(batch)
         test_loss = self.get_loss(ebd)
-        test_acc  = self.get_acc(ebd)
+        hit, tot  = self.get_acc(ebd)
+        test_acc  = hit.cpu() / tot
         values = {
             'test_loss': test_loss,
             'test_acc' : test_acc,

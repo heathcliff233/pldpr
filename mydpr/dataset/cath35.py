@@ -150,20 +150,22 @@ class Cath35DataModule(pl.LightningDataModule):
         self.batch_converter = BatchConverter(alphabet)
 
     def prepare_data(self):
+        pass
+
+    def setup(self, stage):
         tr_name, tr_line = get_filename(self.cfg_dir+'train.txt')
         tr_path = [self.data_dir+name for name in tr_name]
         self.tr_set = Cath35Dataset(tr_path, tr_line)
         self.tr_batch = self.tr_set.get_batch_indices(self.batch_size)
-        ev_name, ev_line = get_filename(self.cfg_dir+'eval.txt')
+        ev_name, ev_line = get_filename(self.cfg_dir+'valid.txt')
         ev_path = [self.data_dir+name for name in ev_name]
         self.ev_set = Cath35Dataset(ev_path, ev_line)
-        self.ev_batch = self.ev_set.get_batch_indices(self.batch_size)
+        self.ev_batch = self.ev_set.get_batch_indices(self.batch_size*4)
         ts_name, ts_line = get_filename(self.cfg_dir+'test.txt')
         ts_path = [self.data_dir+name for name in ts_name]
         self.ts_set = Cath35Dataset(ts_path, ts_line)
-        self.ts_batch = self.ts_set.get_batch_indices(self.batch_size)
+        self.ts_batch = self.ts_set.get_batch_indices(self.batch_size*4)
 
-    def setup(self, stage):
         if stage == 'fit' or stage is None:
             self.tr_sample = self.tr_batch
             self.ev_sample = self.ev_batch
@@ -177,10 +179,10 @@ class Cath35DataModule(pl.LightningDataModule):
                 self.ts_sample = DistributedProxySampler(self.ts_sample, num_replicas=dist.get_world_size(), rank=dist.get_rank())
         
     def train_dataloader(self):
-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample)
+        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
 
     def val_dataloader(self):
-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample)
+        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample)
+        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)

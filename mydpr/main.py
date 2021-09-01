@@ -1,13 +1,16 @@
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint
+import os
 import torch
 import esm
+import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 from model.biencoder import MyEncoder
 from dataset.cath35 import Cath35DataModule
 
+os.environ["MASTER_PORT"] = "7010"
+os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
 model_dir = "../model/"
 use_wandb = False
-batch_sz = 24
+batch_sz = 16
 cath_dir = "/share/wangsheng/train_test_data/cath35_20201021/cath35_a3m/"
 cath_cfg = "../../mydpr/split/"
 if use_wandb:
@@ -34,12 +37,13 @@ def main():
     prev = torch.load('../../mydpr/continue_train/59.pth')
     later = dict((k[7:], v) for (k,v) in prev.items())
     model.load_state_dict(later)
+    model.cuda()
     ##################################
     #model.load_from_checkpoint()
     dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, alphabet)
     trainer = pl.Trainer(
         gpus=[0,1], 
-        accelerator='ddp2', 
+        accelerator='ddp', 
         accumulate_grad_batches=4, 
         precision=16, 
         replace_sampler_ddp=False, 
@@ -48,4 +52,7 @@ def main():
         callbacks=callback_checkpoint,
         fast_dev_run=False,
     )
-    trainer.fit(model, dm)
+    trainer.fit(model, datamodule=dm)
+
+if __name__ == "__main__":
+    main()
