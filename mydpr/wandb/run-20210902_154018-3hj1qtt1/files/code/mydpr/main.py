@@ -43,7 +43,7 @@ def main():
     model = MyEncoder()
     dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, model.alphabet)
     trainer = pl.Trainer(
-        gpus=[0,1,2,3], 
+        gpus=[0,1], 
         accelerator='ddp', 
         accumulate_grad_batches=4, 
         precision=16, 

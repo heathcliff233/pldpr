@@ -1,0 +1,146 @@
+diff --git a/mydpr/dataset/cath35.py b/mydpr/dataset/cath35.py
+index 3b2cca6..d764794 100644
+--- a/mydpr/dataset/cath35.py
++++ b/mydpr/dataset/cath35.py
+@@ -157,14 +157,16 @@ class Cath35DataModule(pl.LightningDataModule):
+         tr_path = [self.data_dir+name for name in tr_name]
+         self.tr_set = Cath35Dataset(tr_path, tr_line)
+         self.tr_batch = self.tr_set.get_batch_indices(self.batch_size)
++
+         ev_name, ev_line = get_filename(self.cfg_dir+'valid.txt')
+         ev_path = [self.data_dir+name for name in ev_name]
+         self.ev_set = Cath35Dataset(ev_path, ev_line)
+-        self.ev_batch = self.ev_set.get_batch_indices(self.batch_size*4)
++        self.ev_batch = self.ev_set.get_batch_indices(self.batch_size)
++
+         ts_name, ts_line = get_filename(self.cfg_dir+'test.txt')
+         ts_path = [self.data_dir+name for name in ts_name]
+         self.ts_set = Cath35Dataset(ts_path, ts_line)
+-        self.ts_batch = self.ts_set.get_batch_indices(self.batch_size*4)
++        self.ts_batch = self.ts_set.get_batch_indices(self.batch_size)
+ 
+         if stage == 'fit' or stage is None:
+             self.tr_sample = self.tr_batch
+@@ -182,7 +184,7 @@ class Cath35DataModule(pl.LightningDataModule):
+         return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
+ 
+     def val_dataloader(self):
+-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
++        return DataLoader(dataset=self.ev_set, collate_fn=self.batch_converter, batch_sampler=self.ev_sample, num_workers=4)
+ 
+     def test_dataloader(self):
+-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
++        return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, batch_sampler=self.ts_sample, num_workers=4)
+diff --git a/mydpr/main.py b/mydpr/main.py
+index 32c1185..1560b3b 100644
+--- a/mydpr/main.py
++++ b/mydpr/main.py
+@@ -6,11 +6,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
+ from model.biencoder import MyEncoder
+ from dataset.cath35 import Cath35DataModule
+ 
+-os.environ["MASTER_PORT"] = "7010"
+-os.environ["CUDA_VISIBLE_DEVICES"] = "5,6"
+-model_dir = "../model/"
+-use_wandb = False
+-batch_sz = 16
++os.environ["MASTER_PORT"] = "39522"
++os.environ["CUDA_VISIBLE_DEVICES"] = "3,5,6,7"
++model_dir = "../model96/"
++use_wandb = True
++batch_sz = 24
+ cath_dir = "/share/wangsheng/train_test_data/cath35_20201021/cath35_a3m/"
+ cath_cfg = "../../mydpr/split/"
+ if use_wandb:
+@@ -31,24 +31,27 @@ callback_checkpoint = ModelCheckpoint(
+ 
+ def main():
+     pl.seed_everything(1234)
+-    encoder, alphabet = esm.pretrained.esm1_t6_43M_UR50S()
+-    model = MyEncoder(encoder)
++    #encoder, alphabet = esm.pretrained.esm1_t6_43M_UR50S()
+     ##################################
+-    prev = torch.load('../../mydpr/continue_train/59.pth')
+-    later = dict((k[7:], v) for (k,v) in prev.items())
+-    model.load_state_dict(later)
+-    model.cuda()
++    #model = MyEncoder(encoder)
++    #prev = torch.load('../../mydpr/continue_train/59.pth')
++    #later = dict((k[7:], v) for (k,v) in prev.items())
++    #model.load_state_dict(later)
++    #model.cuda()
+     ##################################
+-    #model.load_from_checkpoint()
+-    dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, alphabet)
++    #model = MyEncoder.load_from_checkpoint("/user/hongliang/pldpr/model/pl_biencoder-epoch=004-val_acc=0.99.ckpt")
++    model = MyEncoder()
++    dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, model.alphabet)
+     trainer = pl.Trainer(
+-        gpus=[0,1], 
++        gpus=[0,1,2,3], 
+         accelerator='ddp', 
+         accumulate_grad_batches=4, 
+         precision=16, 
+         replace_sampler_ddp=False, 
+         gradient_clip_val=0.5,
+         logger=logger,
++        log_every_n_steps=20,
++        max_epochs=100,
+         callbacks=callback_checkpoint,
+         fast_dev_run=False,
+     )
+diff --git a/mydpr/model/biencoder.py b/mydpr/model/biencoder.py
+index 076ff98..5d16a66 100644
+--- a/mydpr/model/biencoder.py
++++ b/mydpr/model/biencoder.py
+@@ -3,6 +3,7 @@ from torch import nn
+ import torch.nn.functional as F
+ from torch.utils.data import DataLoader
+ import pytorch_lightning as pl
++import esm
+ 
+ class SyncFunction(torch.autograd.Function):
+     @staticmethod
+@@ -39,9 +40,11 @@ def dot_product_scores(q_vectors, ctx_vectors):
+ 
+ 
+ class MyEncoder(pl.LightningModule):
+-    def __init__(self, bert, proj_dim=0):
++    def __init__(self, proj_dim=0):
+         super(MyEncoder, self).__init__()
++        bert, alphabet = esm.pretrained.esm1_t6_43M_UR50S()
+         self.bert = bert 
++        self.alphabet = alphabet
+         self.num_layers = bert.num_layers
+         repr_layers = -1
+         self.repr_layers = (repr_layers + self.num_layers + 1) % (self.num_layers + 1)
+@@ -64,9 +67,10 @@ class MyEncoder(pl.LightningModule):
+ 
+     def get_loss(self, ebd):
+         qebd, cebd = ebd 
+-        if torch.distributed.is_available() and torch.distributed.is_initialized():
+-            qebd = SyncFunction.apply(qebd)
+-            cebd = SyncFunction.apply(cebd)
++        #if torch.distributed.is_available() and torch.distributed.is_initialized():
++        qebd = SyncFunction.apply(qebd)
++        cebd = SyncFunction.apply(cebd)
++        #####################################
+         sim_mx = dot_product_scores(qebd, cebd)
+         label = torch.arange(sim_mx.shape[0])
+         sm_score = F.log_softmax(sim_mx, dim=1)
+@@ -78,8 +82,15 @@ class MyEncoder(pl.LightningModule):
+         )
+         return loss
+     
++    def gather_all_tensor(self, ts):
++        gathered_tensor = [torch.zeros_like(ts) for _ in range(torch.distributed.get_world_size())]
++        torch.distributed.all_gather(gathered_tensor, ts)
++        gathered_tensor = torch.cat(gathered_tensor, 0)
++        return gathered_tensor
++
+     def get_acc(self, ebd):
+         qebd, cebd = ebd 
++        cebd = self.gather_all_tensor(cebd)
+         sim_mx = dot_product_scores(qebd, cebd)
+         label = torch.arange(sim_mx.shape[0], dtype=torch.long)
+         sm_score = F.log_softmax(sim_mx, dim=1)

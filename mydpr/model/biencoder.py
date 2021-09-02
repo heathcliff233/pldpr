@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
+import esm
 
 class SyncFunction(torch.autograd.Function):
     @staticmethod
@@ -39,9 +40,11 @@ def dot_product_scores(q_vectors, ctx_vectors):
 
 
 class MyEncoder(pl.LightningModule):
-    def __init__(self, bert, proj_dim=0):
+    def __init__(self, proj_dim=0):
         super(MyEncoder, self).__init__()
+        bert, alphabet = esm.pretrained.esm1_t6_43M_UR50S()
         self.bert = bert 
+        self.alphabet = alphabet
         self.num_layers = bert.num_layers
         repr_layers = -1
         self.repr_layers = (repr_layers + self.num_layers + 1) % (self.num_layers + 1)
@@ -64,9 +67,10 @@ class MyEncoder(pl.LightningModule):
 
     def get_loss(self, ebd):
         qebd, cebd = ebd 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():
-            qebd = SyncFunction.apply(qebd)
-            cebd = SyncFunction.apply(cebd)
+        #if torch.distributed.is_available() and torch.distributed.is_initialized():
+        qebd = SyncFunction.apply(qebd)
+        cebd = SyncFunction.apply(cebd)
+        #####################################
         sim_mx = dot_product_scores(qebd, cebd)
         label = torch.arange(sim_mx.shape[0])
         sm_score = F.log_softmax(sim_mx, dim=1)
@@ -78,8 +82,15 @@ class MyEncoder(pl.LightningModule):
         )
         return loss
     
+    def gather_all_tensor(self, ts):
+        gathered_tensor = [torch.zeros_like(ts) for _ in range(torch.distributed.get_world_size())]
+        torch.distributed.all_gather(gathered_tensor, ts)
+        gathered_tensor = torch.cat(gathered_tensor, 0)
+        return gathered_tensor
+
     def get_acc(self, ebd):
         qebd, cebd = ebd 
+        cebd = self.gather_all_tensor(cebd)
         sim_mx = dot_product_scores(qebd, cebd)
         label = torch.arange(sim_mx.shape[0], dtype=torch.long)
         sm_score = F.log_softmax(sim_mx, dim=1)
