@@ -67,9 +67,9 @@ class MyEncoder(pl.LightningModule):
 
     def get_loss(self, ebd):
         qebd, cebd = ebd 
-        #if torch.distributed.is_available() and torch.distributed.is_initialized():
-        qebd = SyncFunction.apply(qebd)
-        cebd = SyncFunction.apply(cebd)
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            qebd = SyncFunction.apply(qebd)
+            cebd = SyncFunction.apply(cebd)
         #####################################
         sim_mx = dot_product_scores(qebd, cebd)
         label = torch.arange(sim_mx.shape[0])
@@ -90,7 +90,9 @@ class MyEncoder(pl.LightningModule):
 
     def get_acc(self, ebd):
         qebd, cebd = ebd 
-        cebd = self.gather_all_tensor(cebd)
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            qebd = self.gather_all_tensor(qebd)
+            cebd = self.gather_all_tensor(cebd)
         sim_mx = dot_product_scores(qebd, cebd)
         label = torch.arange(sim_mx.shape[0], dtype=torch.long)
         sm_score = F.log_softmax(sim_mx, dim=1)
@@ -138,7 +140,7 @@ class MyEncoder(pl.LightningModule):
         return values
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-5)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-6)
         return optimizer
 
     
