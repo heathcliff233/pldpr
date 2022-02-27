@@ -34,9 +34,7 @@ def dot_product_scores(q_vectors, ctx_vectors):
     :param ctx_vector:
     :return:
     """
-    # q_vector: n1 x D, ctx_vectors: n2 x D, result n1 x n2
-    r = torch.matmul(q_vectors, torch.transpose(ctx_vectors, 0, 1))
-    return r
+    return torch.matmul(q_vectors, torch.transpose(ctx_vectors, 0, 1))
 
 
 class MyEncoder(pl.LightningModule):
@@ -66,7 +64,7 @@ class MyEncoder(pl.LightningModule):
         return qebd, cebd
 
     def get_loss(self, ebd):
-        qebd, cebd = ebd 
+        qebd, cebd = ebd
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             qebd = SyncFunction.apply(qebd)
             cebd = SyncFunction.apply(cebd)
@@ -75,12 +73,11 @@ class MyEncoder(pl.LightningModule):
         label = torch.arange(sim_mx.shape[0])
         sm_score = F.log_softmax(sim_mx, dim=1)
         label = label.type_as(sm_score).long()
-        loss = F.nll_loss(
+        return F.nll_loss(
             sm_score,
             label,
             reduction="mean"
         )
-        return loss
     
     def gather_all_tensor(self, ts):
         gathered_tensor = [torch.zeros_like(ts) for _ in range(torch.distributed.get_world_size())]
@@ -140,7 +137,6 @@ class MyEncoder(pl.LightningModule):
         return values
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-6)
-        return optimizer
+        return torch.optim.Adam(self.parameters(), lr=1e-6)
 
     

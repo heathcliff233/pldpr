@@ -52,7 +52,7 @@ def main():
         max_epochs=100,
         callbacks=callback_checkpoint,
         fast_dev_run=False,
-        resume_from_checkpoint="../model-prem/pl_biencoder-epoch=012-val_acc=0.7992.ckpt"
+        #resume_from_checkpoint="../model-prem/pl_biencoder-epoch=012-val_acc=0.7992.ckpt"
     )
     trainer.fit(model, datamodule=dm)
 

@@ -4,8 +4,10 @@ import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from typing import Sequence, Tuple, List, Union
 import numpy as np
+import pandas as pd
 import random
 import re
+import os
 import linecache
 from typing import List
 import pytorch_lightning as pl
@@ -115,7 +117,7 @@ class  Cath35Dataset(Dataset):
         self.lines = lines
 
     def get_pair(self, path: str, lines: int) -> Tuple[str, str]:
-        lines = lines//2
+        lines //= 2
         idx2 = random.randint(0, lines-1)
         seq1 = re.sub('[(\-)]', '', linecache.getline(path, 2))
         seq2 = re.sub('[(\-)]', '', linecache.getline(path, 2*idx2 + 2))
@@ -129,16 +131,45 @@ class  Cath35Dataset(Dataset):
     def __len__(self):
         return len(self.names)
 
-    def get_batch_indices(self, batch_size: int) -> List[List[int]] :
+    def get_batch_indices(self, batch_size: int) -> List[List[int]]:
         batches = []
         buf = []
         iters = len(self.names) // batch_size
 
-        for i in range(iters):
+        for _ in range(iters):
             buf = random.sample(range(len(self.names)), batch_size)
             batches.append(buf)
 
         return batches
+
+
+class  UniclustDataset(Dataset):
+    def __init__(self, line_df: pd.DataFrame, data_dir: str):
+        self.df = line_df
+        self.data_dir = data_dir
+        self.sdir = os.listdir(data_dir)
+        self.num_sdir = len(self.sdir)
+
+    def get_pair(self, sdir_path: str) -> Tuple[str, str]:
+        a3m_list = os.listdir(sdir_path)
+        idx1 = random.randint(0, 999)
+        fname = a3m_list[idx1]
+        fpath = os.path.join(sdir_path, fname)
+        fname = fname.split('.')[0]
+        tot_lines = self.df.loc[fname].at('lines')
+        idx2 = random.randint(0, tot_lines-1)
+        seq1 = linecache.getline(fpath, 2)
+        seq2 = linecache.getline(fpath, 2*idx2 + 2)
+
+        return seq1, seq2
+
+    def __getitem__(self, index: int) -> Tuple[str, str]:
+        sdir_path = os.path.join(self.data_dir, self.sdir[index%self.num_sdir])
+        seq1, seq2 = self.get_pair(sdir_path)
+        return seq1, seq2
+
+    def __len__(self):
+        return 1000*self.num_sdir
 
 
 class Cath35DataModule(pl.LightningDataModule):
@@ -188,3 +219,38 @@ class Cath35DataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, batch_sampler=self.ts_sample, num_workers=4)
+
+
+class UniclustDataModule(pl.LightningDataModule):
+    def __init__(self, data_dir, cfg_dir, batch_size, alphabet):
+        super().__init__()
+        self.data_dir = data_dir
+        self.cfg_dir = cfg_dir
+        self.batch_size = batch_size
+        self.batch_converter = BatchConverter(alphabet)
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage):
+        train_path = os.path.join(self.cfg_dir, 'train')
+        tr_df = pd.read_table(os.path.join(self.cfg_dir, 'train.txt'))
+        self.tr_set = Cath35Dataset(tr_df, train_path)
+
+        val_path = os.path.join(self.cfg_dir, 'val')
+        va_df = pd.read_table(os.path.join(self.cfg_dir, 'val.txt'))
+        self.tr_set = Cath35Dataset(va_df, val_path)
+
+        test_path = os.path.join(self.cfg_dir, 'test')
+        ts_df = pd.read_table(os.path.join(self.cfg_dir, 'test.txt'))
+        self.tr_set = Cath35Dataset(ts_df, test_path)
+
+        
+    def train_dataloader(self):
+        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, num_workers=4)
+
+    def val_dataloader(self):
+        return DataLoader(dataset=self.ev_set, collate_fn=self.batch_converter, num_workers=4)
+
+    def test_dataloader(self):
+        return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, num_workers=4)

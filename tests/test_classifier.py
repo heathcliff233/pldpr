@@ -13,3 +13,4 @@ def test_mydpr():
 
     #results = trainer.test(test_dataloaders=test)
     #assert results[0]['test_acc'] > 0.7
+ 
