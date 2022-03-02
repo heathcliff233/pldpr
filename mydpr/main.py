@@ -31,13 +31,6 @@ callback_checkpoint = ModelCheckpoint(
 
 def main():
     pl.seed_everything(1234)
-    ##################################
-    #model = MyEncoder()
-    #prev = torch.load('../../mydpr/continue_train/59.pth')
-    #later = dict((k[7:], v) for (k,v) in prev.items())
-    #model.load_state_dict(later)
-    #model.cuda()
-    ##################################
     model = MyEncoder()
     dm = Cath35DataModule(cath_dir, cath_cfg, batch_sz, model.alphabet)
     trainer = pl.Trainer(

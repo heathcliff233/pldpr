@@ -235,15 +235,15 @@ class UniclustDataModule(pl.LightningDataModule):
     def setup(self, stage):
         train_path = os.path.join(self.cfg_dir, 'train')
         tr_df = pd.read_table(os.path.join(self.cfg_dir, 'train.txt'))
-        self.tr_set = Cath35Dataset(tr_df, train_path)
+        self.tr_set = UniclustDataset(tr_df, train_path)
 
         val_path = os.path.join(self.cfg_dir, 'val')
         va_df = pd.read_table(os.path.join(self.cfg_dir, 'val.txt'))
-        self.tr_set = Cath35Dataset(va_df, val_path)
+        self.tr_set = UniclustDataset(va_df, val_path)
 
         test_path = os.path.join(self.cfg_dir, 'test')
         ts_df = pd.read_table(os.path.join(self.cfg_dir, 'test.txt'))
-        self.tr_set = Cath35Dataset(ts_df, test_path)
+        self.tr_set = UniclustDataset(ts_df, test_path)
 
         
     def train_dataloader(self):
