@@ -169,56 +169,7 @@ class  UniclustDataset(Dataset):
         return seq1, seq2
 
     def __len__(self):
-        return 1000*self.num_sdir
-
-
-class Cath35DataModule(pl.LightningDataModule):
-    def __init__(self, data_dir, cfg_dir, batch_size, alphabet):
-        super().__init__()
-        self.data_dir = data_dir
-        self.cfg_dir = cfg_dir
-        self.batch_size = batch_size
-        self.batch_converter = BatchConverter(alphabet)
-
-    def prepare_data(self):
-        pass
-
-    def setup(self, stage):
-        tr_name, tr_line = get_filename(self.cfg_dir+'train.txt')
-        tr_path = [self.data_dir+name for name in tr_name]
-        self.tr_set = Cath35Dataset(tr_path, tr_line)
-        self.tr_batch = self.tr_set.get_batch_indices(self.batch_size)
-
-        ev_name, ev_line = get_filename(self.cfg_dir+'valid.txt')
-        ev_path = [self.data_dir+name for name in ev_name]
-        self.ev_set = Cath35Dataset(ev_path, ev_line)
-        self.ev_batch = self.ev_set.get_batch_indices(self.batch_size)
-
-        ts_name, ts_line = get_filename(self.cfg_dir+'test.txt')
-        ts_path = [self.data_dir+name for name in ts_name]
-        self.ts_set = Cath35Dataset(ts_path, ts_line)
-        self.ts_batch = self.ts_set.get_batch_indices(self.batch_size)
-
-        if stage == 'fit' or stage is None:
-            self.tr_sample = self.tr_batch
-            self.ev_sample = self.ev_batch
-            if dist.is_available() and dist.is_initialized():
-                self.tr_sample = DistributedProxySampler(self.tr_sample, num_replicas=dist.get_world_size(), rank=dist.get_rank())
-                self.ev_sample = DistributedProxySampler(self.ev_sample, num_replicas=dist.get_world_size(), rank=dist.get_rank())
-        
-        if stage =='test' or stage is None:
-            self.ts_sample = self.ts_batch
-            if torch.distributed.is_available() and torch.distributed.is_initialized():
-                self.ts_sample = DistributedProxySampler(self.ts_sample, num_replicas=dist.get_world_size(), rank=dist.get_rank())
-        
-    def train_dataloader(self):
-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, batch_sampler=self.tr_sample, num_workers=4)
-
-    def val_dataloader(self):
-        return DataLoader(dataset=self.ev_set, collate_fn=self.batch_converter, batch_sampler=self.ev_sample, num_workers=4)
-
-    def test_dataloader(self):
-        return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, batch_sampler=self.ts_sample, num_workers=4)
+        return 100*self.num_sdir
 
 
 class UniclustDataModule(pl.LightningDataModule):
@@ -233,15 +184,15 @@ class UniclustDataModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage):
-        train_path = os.path.join(self.cfg_dir, 'train')
+        train_path = os.path.join(self.cfg_dir, 'train/')
         tr_df = pd.read_table(os.path.join(self.cfg_dir, 'train.txt'))
         self.tr_set = UniclustDataset(tr_df, train_path)
 
-        val_path = os.path.join(self.cfg_dir, 'val')
+        val_path = os.path.join(self.cfg_dir, 'val/')
         va_df = pd.read_table(os.path.join(self.cfg_dir, 'val.txt'))
         self.tr_set = UniclustDataset(va_df, val_path)
 
-        test_path = os.path.join(self.cfg_dir, 'test')
+        test_path = os.path.join(self.cfg_dir, 'test/')
         ts_df = pd.read_table(os.path.join(self.cfg_dir, 'test.txt'))
         self.tr_set = UniclustDataset(ts_df, test_path)
 
