@@ -70,7 +70,7 @@ class BatchConverter(object):
 
     def __call__(self, raw_batch: Sequence[Tuple[str, str]]):
         # RoBERTa uses an eos token, while ESM-1 does not.
-        limit_size = 500
+        limit_size = 400
         batch_size = len(raw_batch)
         max_len = max(max(len(seq1),len(seq2)) for seq1, seq2 in raw_batch)
         max_len = min(limit_size, max_len)
@@ -150,26 +150,29 @@ class  UniclustDataset(Dataset):
         self.sdir = os.listdir(data_dir)
         self.num_sdir = len(self.sdir)
 
-    def get_pair(self, sdir_path: str) -> Tuple[str, str]:
+    def get_pair(self, sdir_path: str, fid: int) -> Tuple[str, str]:
         a3m_list = os.listdir(sdir_path)
-        idx1 = random.randint(0, 999)
+        # idx1 = random.randint(0, 999)
+        idx1 = fid
         fname = a3m_list[idx1]
         fpath = os.path.join(sdir_path, fname)
         fname = fname.split('.')[0]
-        tot_lines = self.df.loc[fname].at('lines')
+        tot_lines = self.df.loc[fname].at['lines']
         idx2 = random.randint(0, tot_lines-1)
         seq1 = linecache.getline(fpath, 2)
+        #seq2 = linecache.getline(fpath, 2)
         seq2 = linecache.getline(fpath, 2*idx2 + 2)
 
         return seq1, seq2
 
     def __getitem__(self, index: int) -> Tuple[str, str]:
-        sdir_path = os.path.join(self.data_dir, self.sdir[index%self.num_sdir])
-        seq1, seq2 = self.get_pair(sdir_path)
+        # sdir_path = os.path.join(self.data_dir, self.sdir[index%self.num_sdir])
+        sdir_path = os.path.join(self.data_dir, self.sdir[index//1000])
+        seq1, seq2 = self.get_pair(sdir_path, index%1000)
         return seq1, seq2
 
     def __len__(self):
-        return 100*self.num_sdir
+        return 1000*self.num_sdir
 
 
 class UniclustDataModule(pl.LightningDataModule):
@@ -185,23 +188,24 @@ class UniclustDataModule(pl.LightningDataModule):
 
     def setup(self, stage):
         train_path = os.path.join(self.cfg_dir, 'train/')
-        tr_df = pd.read_table(os.path.join(self.cfg_dir, 'train.txt'))
+        tr_df = pd.read_table(os.path.join(self.cfg_dir, 'train.txt'), sep=',', index_col=0)
         self.tr_set = UniclustDataset(tr_df, train_path)
 
-        val_path = os.path.join(self.cfg_dir, 'val/')
-        va_df = pd.read_table(os.path.join(self.cfg_dir, 'val.txt'))
-        self.tr_set = UniclustDataset(va_df, val_path)
+        val_path = os.path.join(self.cfg_dir, 'eval/')
+        va_df = pd.read_table(os.path.join(self.cfg_dir, 'eval.txt'), sep=',', index_col=0)
+        # va_df[va_df['lines'] > 4] = 4
+        self.ev_set = UniclustDataset(va_df, val_path)
 
         test_path = os.path.join(self.cfg_dir, 'test/')
-        ts_df = pd.read_table(os.path.join(self.cfg_dir, 'test.txt'))
-        self.tr_set = UniclustDataset(ts_df, test_path)
+        ts_df = pd.read_table(os.path.join(self.cfg_dir, 'test.txt'), sep=',', index_col=0)
+        self.ts_set = UniclustDataset(ts_df, test_path)
 
         
     def train_dataloader(self):
-        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, num_workers=4)
+        return DataLoader(dataset=self.tr_set, collate_fn=self.batch_converter, num_workers=4, batch_size=self.batch_size)
 
     def val_dataloader(self):
-        return DataLoader(dataset=self.ev_set, collate_fn=self.batch_converter, num_workers=4)
+        return DataLoader(dataset=self.ev_set, collate_fn=self.batch_converter, num_workers=4, batch_size=self.batch_size)
 
     def test_dataloader(self):
-        return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, num_workers=4)
+        return DataLoader(dataset=self.ts_set, collate_fn=self.batch_converter, num_workers=4, batch_size=self.batch_size)

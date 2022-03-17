@@ -50,7 +50,7 @@ class MyEncoder(pl.LightningModule):
 
     def forward_once(self, x):
         x = self.bert(x, repr_layers=[self.repr_layers])['representations'][self.repr_layers]
-        x[:,1:] *= 0
+        #x[:,1:] *= 0
         x = x.sum(dim=1)
         #x = x[:,0]
         if self.recast :
@@ -59,8 +59,12 @@ class MyEncoder(pl.LightningModule):
 
     def forward(self, batch):
         seq1, seq2 = batch
-        qebd = self.forward_once(seq1)
-        cebd = self.forward_once(seq2)
+        ####################################
+        #qebd = self.forward_once(seq1)
+        #cebd = self.forward_once(seq2)
+        qebd = F.normalize(self.forward_once(seq1))
+        cebd = F.normalize(self.forward_once(seq2))
+        ####################################
         return qebd, cebd
 
     def get_loss(self, ebd):
@@ -104,12 +108,15 @@ class MyEncoder(pl.LightningModule):
         loss = self.get_loss(ebd)
         with torch.no_grad():
             hit, tot = self.get_acc(ebd)
-            acc = hit.cpu() / tot
+            acc = hit / tot
         values = {
             'train_loss': loss,
             'train_acc' : acc,
+            'total' : tot,
         }
-        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=True)
+        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=False, rank_zero_only=True)
+        #sch = self.lr_schedulers()
+        #sch.step()
         return {'loss': loss}
 
     def validation_step(self, batch, batch_idx):
@@ -121,7 +128,7 @@ class MyEncoder(pl.LightningModule):
             'val_loss': val_loss,
             'val_acc' : val_acc,
         }
-        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=True)
+        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=True, rank_zero_only=True)
         return values
 
     def test_step(self, batch, batch_idx):
@@ -133,10 +140,19 @@ class MyEncoder(pl.LightningModule):
             'test_loss': test_loss,
             'test_acc' : test_acc,
         }
-        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=True)
+        self.log_dict(values, on_step=True, on_epoch=True, sync_dist=True, rank_zero_only=True)
         return values
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-6)
+        opt = torch.optim.AdamW(self.parameters(), lr=1e-7)
+        #sch = torch.optim.lr_scheduler.StepLR(optimizer=opt, step_size=80, gamma=0.85)
+        return opt
+        '''
+        sch = torch.optim.lr_scheduler.StepLR(optimizer=opt, step_size=80, gamma=0.85)
+        return {
+            'optimizer': opt,
+            'lr_scheduler': sch,
+        }
+        '''
 
     

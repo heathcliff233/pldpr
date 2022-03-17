@@ -6,11 +6,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from model.biencoder import MyEncoder
 from dataset.cath35 import UniclustDataModule
 
-os.environ["MASTER_PORT"] = "39523"
-os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ["MASTER_PORT"] = "39524"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 model_dir = "../model_uni/"
-use_wandb = True
-batch_sz = 14*4
+use_wandb = False
+batch_sz = 224
 cath_dir = "/share/hongliang/fastMSA-uc/dataset/"
 if use_wandb:
     from pytorch_lightning.loggers import WandbLogger
@@ -31,14 +31,16 @@ callback_checkpoint = ModelCheckpoint(
 def main():
     pl.seed_everything(1234)
     model = MyEncoder().load_from_checkpoint(
-        checkpoint_path="../model_uni/pl_biencoder-epoch=000-val_acc=0.3651.ckpt"
+        #checkpoint_path="../model-prem/pl_biencoder-epoch=012-val_acc=0.7992.ckpt"
+        checkpoint_path="../model_test/pl_biencoder-epoch=585-val_acc=0.8470.ckpt"
     )
     dm = UniclustDataModule(cath_dir, cath_dir, batch_sz, model.alphabet)
     trainer = pl.Trainer(
-        gpus=[0,1,2,3], 
-        accelerator='ddp', 
-        accumulate_grad_batches=4, 
-        precision=16, 
+        gpus = 0,
+        #gpus=[0,1,2,3], 
+        #accelerator='ddp', 
+        #accumulate_grad_batches=4, 
+        #precision=16, 
         #replace_sampler_ddp=False, 
         #gradient_clip_val=0.5,
         logger=logger,
@@ -48,7 +50,8 @@ def main():
         fast_dev_run=False,
         #resume_from_checkpoint="../model-prem/pl_biencoder-epoch=012-val_acc=0.7992.ckpt"
     )
-    trainer.fit(model, datamodule=dm)
+    #trainer.fit(model, datamodule=dm)
+    trainer.test(model, datamodule=dm)
 
 if __name__ == "__main__":
     main()
