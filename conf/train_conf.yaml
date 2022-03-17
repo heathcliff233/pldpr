@@ -8,12 +8,13 @@ trainer:
   precision: 16
   batch_size: 56 
   max_epochs: 100
+  cath_dir: /share/hongliang/fastMSA-uc/dataset/
 
 model:
   resume: True
   ckpt_path: ./model_uni/pl_biencoder-epoch=000-val_acc=0.3651.ckpt
 
-checkpoint:
+callback:
   monitor: val_acc
   dirpath: ./model_uni/
   filename: pl_biencoder-{epoch:03d}-{val_acc:.4f}
@@ -22,4 +23,7 @@ checkpoint:
   save_on_train_epoch_end: True
 
 logger:
-  log_every_n_step: 10
+  log_every_n_steps: 10
+  use_wandb: True
+  project: uniclust_pl
+  log_model: False

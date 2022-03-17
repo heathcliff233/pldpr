@@ -9,7 +9,7 @@ setup(
     author='Bright Hong',
     author_email='brighthong233@gmail.com',
     # REPLACE WITH YOUR OWN GITHUB PROJECT LINK
-    url='https://github.com/PyTorchLightning/pytorch-lightning-conference-seed',
+    url='https://github.com/heathcliff233/pldpr',
     install_requires=['pytorch-lightning'],
     packages=find_packages(),
 )
