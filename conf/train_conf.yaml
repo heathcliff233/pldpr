@@ -1,0 +1,25 @@
+trainer:
+  master_port: 39523
+  devices: "4,5,6,7"
+  gpus: [0,1,2,3]
+  seed: 1234
+  acc_step: 4
+  accelerator: ddp
+  precision: 16
+  batch_size: 56 
+  max_epochs: 100
+
+model:
+  resume: True
+  ckpt_path: ./model_uni/pl_biencoder-epoch=000-val_acc=0.3651.ckpt
+
+checkpoint:
+  monitor: val_acc
+  dirpath: ./model_uni/
+  filename: pl_biencoder-{epoch:03d}-{val_acc:.4f}
+  mode: max
+  save_top_k: 5
+  save_on_train_epoch_end: True
+
+logger:
+  log_every_n_step: 10
